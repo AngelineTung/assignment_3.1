@@ -1,10 +1,8 @@
-# .github/workflows/terraform-deploy.yml
 name: Terraform Deployment
 
 on:
   push:
     branches: [ "main" ]
-
 
 permissions:
   contents: read
@@ -13,7 +11,7 @@ permissions:
 env:
   AWS_REGION: ap-southeast-1
   TF_BACKEND_BUCKET: my-tfstate-bucket-prod
-  TF_BACKEND_KEY: infra/network/terraform.tfstate
+  TF_BACKEND_KEY: terraform/terraform.tfstate   # <- clearer
   TF_BACKEND_LOCK: my-tf-locks-prod
 
 jobs:
@@ -34,7 +32,7 @@ jobs:
 
       - name: Terraform Init (remote backend)
         run: |
-          terraform init \
+          terraform -chdir=terraform init \
             -backend-config="bucket=${TF_BACKEND_BUCKET}" \
             -backend-config="key=${TF_BACKEND_KEY}" \
             -backend-config="region=${AWS_REGION}" \
@@ -42,7 +40,7 @@ jobs:
             -backend-config="encrypt=true"
 
       - name: Terraform Plan
-        run: terraform plan
+        run: terraform -chdir=terraform plan
 
       - name: Terraform Apply
-        run: terraform apply --auto-approve
+        run: terraform -chdir=terraform apply --auto-approve
