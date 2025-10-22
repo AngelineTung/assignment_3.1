@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  security-events: write   # needed for SARIF upload
+  security-events: write
 
 env:
   AWS_REGION: ap-southeast-1
@@ -21,7 +21,7 @@ jobs:
     defaults:
       run:
         shell: bash
-        # You said your TF files live here:
+        # Applies to *run* steps only (Terraform), not actions:
         working-directory: .github/workflows/terraform
 
     steps:
@@ -32,25 +32,25 @@ jobs:
         uses: aquasecurity/trivy-action@0.24.0
         with:
           scan-type: 'fs'
-          scan-ref: '.'                   # '.' == .github/workflows/terraform
+          # Scan your TF directory, but from repo root (actions run at root)
+          scan-ref: '.github/workflows/terraform'
           scanners: 'vuln,secret,config'
           format: 'sarif'
-          output: 'trivy-results.sarif'   # <- write SARIF relative to working-directory
+          # ✅ Write SARIF at repo root so upload can find it
+          output: 'trivy-results.sarif'
           ignore-unfixed: true
           severity: 'HIGH,CRITICAL'
-          exit-code: '0'                  # set to '1' to fail on findings
+          exit-code: '0'
 
       - name: Upload SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
-          # Match the file we just wrote (relative to repo root)
-          sarif_file: .github/workflows/terraform/trivy-results.sarif
+          sarif_file: trivy-results.sarif   # <- repo root
 
-      # Optional: prove the SARIF exists (remove later)
-      - name: Debug SARIF path
+      # (optional) quick check
+      - name: Debug SARIF existence
         run: |
-          pwd
-          ls -l trivy-results.sarif
+          ls -l $GITHUB_WORKSPACE/trivy-results.sarif
 
       # ---------- Terraform ----------
       - name: Configure AWS credentials
