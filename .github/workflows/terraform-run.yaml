@@ -21,8 +21,7 @@ jobs:
     defaults:
       run:
         shell: bash
-        # 👇 You said TF lives next to the YAML; keep that here.
-        # (Not generally recommended, but this honors your setup.)
+        # You said your TF files live here:
         working-directory: .github/workflows/terraform
 
     steps:
@@ -35,10 +34,8 @@ jobs:
           scan-type: 'fs'
           scan-ref: '.'                   # '.' == .github/workflows/terraform
           scanners: 'vuln,secret,config'
-          security-checks: 'vuln,secret,config'
           format: 'sarif'
-          # ✅ Write SARIF to an absolute path so upload never 404s
-          output: '${{ github.workspace }}/trivy-results.sarif'
+          output: 'trivy-results.sarif'   # <- write SARIF relative to working-directory
           ignore-unfixed: true
           severity: 'HIGH,CRITICAL'
           exit-code: '0'                  # set to '1' to fail on findings
@@ -46,13 +43,14 @@ jobs:
       - name: Upload SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ github.workspace }}/trivy-results.sarif
+          # Match the file we just wrote (relative to repo root)
+          sarif_file: .github/workflows/terraform/trivy-results.sarif
 
-      # (Optional) quick check to prove the SARIF exists
+      # Optional: prove the SARIF exists (remove later)
       - name: Debug SARIF path
         run: |
-          echo "Workspace: $GITHUB_WORKSPACE"
-          ls -l "$GITHUB_WORKSPACE/trivy-results.sarif" || (echo "No SARIF found" && exit 1)
+          pwd
+          ls -l trivy-results.sarif
 
       # ---------- Terraform ----------
       - name: Configure AWS credentials
