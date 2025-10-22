@@ -1,52 +1,18 @@
-name: Terraform (auto-detect)
-
-on:
-  workflow_dispatch:
-    inputs:
-      action:
-        description: 'plan | apply | destroy'
-        required: true
-        default: 'plan'
-        type: choice
-        options:
-          - plan
-          - destroy
+permissions:
+  contents: read
+  security-events: write
 
 env:
   AWS_REGION: ap-southeast-1
+  TF_BACKEND_BUCKET: my-tfstate-bucket-prod
+  TF_BACKEND_KEY: infra/network/terraform.tfstate
+  TF_BACKEND_LOCK: my-tf-locks-prod
 
 jobs:
-  tf:
+  CICD:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # 🔎 Find a directory (depth≤4) that contains *.tf or *.tf.json
-      - name: Locate Terraform directory
-        id: locate
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Searching for Terraform config (maxdepth 4)…"
-          mapfile -t DIRS < <(find . -maxdepth 4 -type f \( -name "*.tf" -o -name "*.tf.json" \) -printf '%h\n' | sort -u)
-          if [[ ${#DIRS[@]} -eq 0 ]]; then
-            echo "❌ No Terraform config found in the repo."
-            echo "Tip: are the files committed and not .gitignored?"
-            exit 1
-          fi
-          printf "Candidates:\n%s\n" "${DIRS[@]}"
-          TF_DIR="${DIRS[0]}"
-          echo "✅ Using TF_DIR=$TF_DIR"
-          echo "TF_DIR=$TF_DIR" >> "$GITHUB_OUTPUT"
-
-      - name: Show files in TF dir
-        run: |
-          cd "${{ steps.locate.outputs.TF_DIR }}"
-          pwd
-          echo "Listing *.tf / *.tf.json:"
-          ls -1 *.tf *.tf.json 2>/dev/null || true
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -54,26 +20,21 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          # If you use OIDC/role assumption instead of static keys:
-          # role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          # role-session-name: gha-terraform
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v2
 
-      - name: Terraform Init
-        working-directory: ${{ steps.locate.outputs.TF_DIR }}
+      - name: Terraform Init (remote backend)
         run: |
-          # If your backend block is empty in code, pass a .hcl:
-          # terraform init -input=false -backend-config=backend-prod.hcl
-          terraform init -input=false
+          terraform init \
+            -backend-config="bucket=${TF_BACKEND_BUCKET}" \
+            -backend-config="key=${TF_BACKEND_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_BACKEND_LOCK}" \
+            -backend-config="encrypt=true"
 
-      - name: Terraform Plan (default)
-        if: ${{ github.event.inputs.action == 'plan' }}
-        working-directory: ${{ steps.locate.outputs.TF_DIR }}
-        run: terraform plan -input=false -no-color
+      - name: Terraform Plan
+        run: terraform plan
 
-      - name: Terraform Destroy (no separate plan)
-        if: ${{ github.event.inputs.action == 'destroy' }}
-        working-directory: ${{ steps.locate.outputs.TF_DIR }}
-        run: terraform destroy -auto-approve -input=false -no-color
+      - name: Terraform Apply
+        run: terraform apply --auto-approve
