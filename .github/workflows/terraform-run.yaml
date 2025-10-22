@@ -21,29 +21,38 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: .github/workflows/terraform   # <— your actual TF folder
+        # 👇 You said TF lives next to the YAML; keep that here.
+        # (Not generally recommended, but this honors your setup.)
+        working-directory: .github/workflows/terraform
 
     steps:
       - uses: actions/checkout@v4
 
       # ---------- Security scan (Trivy) ----------
       - name: Trivy scan (IaC + secrets + vuln)
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@0.24.0
         with:
-          scan-type: 'fs'                 # scan current folder (because of working-directory)
+          scan-type: 'fs'
           scan-ref: '.'                   # '.' == .github/workflows/terraform
-          scanners: 'vuln,secret,config'  # SCA, secret leaks, IaC/misconfig checks
+          scanners: 'vuln,secret,config'
           security-checks: 'vuln,secret,config'
           format: 'sarif'
-          output: 'trivy-results.sarif'
+          # ✅ Write SARIF to an absolute path so upload never 404s
+          output: '${{ github.workspace }}/trivy-results.sarif'
           ignore-unfixed: true
           severity: 'HIGH,CRITICAL'
-          exit-code: '0'                  # change to '1' to fail the build on findings
+          exit-code: '0'                  # set to '1' to fail on findings
 
       - name: Upload SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ github.workspace }}/.github/workflows/terraform/trivy-results.sarif
+          sarif_file: ${{ github.workspace }}/trivy-results.sarif
+
+      # (Optional) quick check to prove the SARIF exists
+      - name: Debug SARIF path
+        run: |
+          echo "Workspace: $GITHUB_WORKSPACE"
+          ls -l "$GITHUB_WORKSPACE/trivy-results.sarif" || (echo "No SARIF found" && exit 1)
 
       # ---------- Terraform ----------
       - name: Configure AWS credentials
@@ -54,11 +63,11 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init (remote backend)
         run: |
-          terraform init \
+          terraform init -input=false \
             -backend-config="bucket=${TF_BACKEND_BUCKET}" \
             -backend-config="key=${TF_BACKEND_KEY}" \
             -backend-config="region=${AWS_REGION}" \
@@ -66,7 +75,7 @@ jobs:
             -backend-config="encrypt=true"
 
       - name: Terraform Plan
-        run: terraform plan
+        run: terraform plan -input=false -no-color
 
       - name: Terraform Apply
-        run: terraform apply --auto-approve
+        run: terraform apply --auto-approve -input=false -no-color
