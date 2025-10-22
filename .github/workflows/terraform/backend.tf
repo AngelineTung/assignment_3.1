@@ -1,13 +1,11 @@
 terraform {
-  backend "s3" {
-    bucket         = "my-tfstate-bucket-prod"   # existing bucket name
-    key            = "infra/network/terraform.tfstate"
-    region         = "ap-southeast-1"
-    dynamodb_table = "my-tf-locks-prod"         # for state locking
-    encrypt        = true
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
   }
-}
 
-provider "aws" {
-  region = "ap-southeast-1"
+  backend "s3" {}  # values passed via -backend-config in your workflow
 }

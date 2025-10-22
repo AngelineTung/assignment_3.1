@@ -1,14 +1,4 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.0"
-    }
-  }
-  # optional but nice to assert:
-  required_version = ">= 1.6.0"
-}
-
 provider "aws" {
-  region = "ap-southeast-1"
+  region = var.aws_region
+  # profile = var.aws_profile   # if you use local profiles
 }
